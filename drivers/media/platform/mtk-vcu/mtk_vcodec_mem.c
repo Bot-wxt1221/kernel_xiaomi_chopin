@@ -12,7 +12,79 @@
  * GNU General Public License for more details.
  */
 
-#include "mtk_vcodec_mem.h"
+#include <media/videobuf2-dma-contig.h>
+#include <uapi/linux/mtk_vcu_controls.h>
+#include <linux/slab.h>
+#include <asm/cacheflush.h>
+#include <linux/mm.h>
+#include <linux/dma-mapping.h>
+#include <mailbox/cmdq-sec.h>
+
+#ifndef CONFIG_ARM64
+#include "mm/dma.h"
+#endif
+
+#ifndef dmac_map_area
+#define dmac_map_area __dma_map_area
+#endif
+#ifndef dmac_unmap_area
+#define dmac_unmap_area __dma_unmap_area
+#endif
+#ifndef dmac_flush_range
+#define dmac_flush_range __dma_flush_range
+#endif
+
+#define CODEC_MAX_BUFFER 512U
+#define CODEC_ALLOCATE_MAX_BUFFER_SIZE 0x8000000UL /*128MB*/
+#define CODEC_MSK(addr) ((addr >> PAGE_SHIFT) & 0xFFFF)
+
+/**
+ * struct mtk_vcu_mem - memory buffer allocated in kernel
+ *
+ * @mem_priv:   vcu allocated buffer vb2_dc_buf
+ * @size:       buffer size
+ * @dbuf:       io buffer dma_buff
+ * @iova:       io buffer iova
+ */
+struct mtk_vcu_mem {
+	void *mem_priv;
+	size_t size;
+	struct dma_buf *dbuf;
+	dma_addr_t iova;
+	atomic_t ref_cnt;
+};
+
+struct vcu_pa_pages {
+	unsigned long pa;
+	unsigned long kva;
+	atomic_t ref_cnt;
+	struct list_head list;
+};
+
+/**
+ * struct mtk_vcu_queue - the allocated buffer queue
+ *
+ * @vcu:        struct mtk_vcu
+ * @mmap_lock:  the lock to protect allocated buffer
+ * @dev:        device
+ * @num_buffers:        allocated buffer number
+ * @mem_ops:    the file operation of memory allocated
+ * @bufs:       store the information of allocated buffers
+ * @map_buf_pa: store map pa and it's flag
+ */
+struct mtk_vcu_queue {
+	void *vcu;
+	struct mutex mmap_lock;
+	struct device *dev;
+	struct device *cmdq_dev;
+	unsigned int num_buffers;
+	const struct vb2_mem_ops *mem_ops;
+	struct mtk_vcu_mem bufs[CODEC_MAX_BUFFER];
+	uint64_t map_buf_pa;
+	struct vcu_pa_pages pa_pages;
+};
+
+
 
 /*
  * #undef pr_debug
