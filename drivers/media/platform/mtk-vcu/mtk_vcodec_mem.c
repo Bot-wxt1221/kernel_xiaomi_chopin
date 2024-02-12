@@ -19,7 +19,27 @@
  * #define pr_debug pr_info
  */
 
+struct mtk_vcu_queue *mtk_vcu_mem_init(struct device *dev,
+	struct device *cmdq_dev)
+{
+	struct mtk_vcu_queue *vcu_queue;
 
+	pr_debug("Allocate new vcu queue !\n");
+	vcu_queue = kzalloc(sizeof(struct mtk_vcu_queue), GFP_KERNEL);
+	if (vcu_queue == NULL) {
+		pr_info("Allocate new vcu queue fail!\n");
+		return NULL;
+	}
+	INIT_LIST_HEAD(&vcu_queue->pa_pages.list);
+	vcu_queue->mem_ops = &vb2_dma_contig_memops;
+	vcu_queue->dev = dev;
+	vcu_queue->cmdq_dev = cmdq_dev;
+	vcu_queue->num_buffers = 0;
+	vcu_queue->map_buf_pa = 0;
+	mutex_init(&vcu_queue->mmap_lock);
+
+	return vcu_queue;
+}
 
 void mtk_vcu_mem_release(struct mtk_vcu_queue *vcu_queue)
 {
